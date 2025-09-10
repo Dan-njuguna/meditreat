@@ -11,10 +11,11 @@ DESCRIPTION:
 """
 
 from langchain_core.prompts import ChatPromptTemplate
+from utils.messages import stream_extract_message
 from utils.config import setup_logger, settings
 from langchain_openai import ChatOpenAI
+from typing import Any, AsyncGenerator
 from core.base import LLMBase
-from typing import Any
 
 logger = setup_logger("openai_llm.log")
 
@@ -26,39 +27,57 @@ class AIChatCore(LLMBase):
     def __init__(self, llm):
         super().__init__(llm)
 
-    def generate(self, prompt: str, context: str, **kwargs: Any):
+    async def generate(self, prompt: str, context: str, **kwargs: Any) -> AsyncGenerator[str, None]:
         """
         Generate a response from the AI chat model.
         :param prompt: The input prompt for the chat model.
         :param context: The chat context to include in the prompt.
         :param kwargs: Additional parameters for the chat model.
 
-        :return: The generated response from the chat model.
+        :return: Stream AI chat model response using AsyncGenerator.
         """
         if not prompt:
             logger.error("Empty prompt provided to AI")
-            return "Invalid prompt."
-        
+            yield "Invalid prompt."
+            return
+
         user_query = prompt
         system_prompt = settings.get(
-            "system_prompt", 
-            "You are a helpful assistant. Always use web search to provide up-to-date and location-specific insights. Context for past chats is: {context}. Search and respond to: {user_query}"
+            "system_prompt",
+            """
+            You are MediTreat, a supportive and trustworthy medical assistant chatbot. 
+
+            --- ROLE ---
+            - Be friendly, empathetic, and conversational. 
+            - Act like a medical assistant, but never claim to be a doctor.
+
+            --- INPUTS ---
+            - {context} → summary of the recent conversation and/or retrieved knowledge.
+            - {user_query} → the user’s latest question.
+
+            --- INSTRUCTIONS ---
+            1. Use {context} only as background — don’t repeat it word-for-word. 
+            2. Answer {user_query} naturally in clear, supportive language. 
+            3. If the response involves **medical information, advice, symptoms, or treatments**, 
+            add the disclaimer at the end:
+            I’m not a doctor. This information is for educational purposes only. 
+            Please consult a licensed healthcare professional for medical advice.
+            4. If the response is just a **greeting, acknowledgement, or small talk**, 
+            do **not** include the disclaimer.
+            5. If the query might indicate an emergency (chest pain, severe bleeding, 
+            difficulty breathing, etc.), explicitly advise seeking urgent medical help. 
+            6. If unsure, be honest and recommend consulting a healthcare professional.
+            """
         )
-
         prompt_template = ChatPromptTemplate.from_template(system_prompt)
-
         chain = prompt_template | self.llm
 
-        if kwargs:
-            response = chain.invoke({"context": context, "user_query": user_query}, **kwargs)
-            logger.info(f"Response from llm: {response}")
-        else:
-            response = chain.invoke({"context": context, "user_query": user_query})
-        
-        logger.info("Successfully received response from AI")
-        return response
+        async for chunk in chain.astream({"context": context, "user_query": user_query}, **kwargs):
+            logger.info(f"Streaming chunk: {chunk}")
+            for message in stream_extract_message(chunk):
+                yield message
 
-    def summarize(self, context: str):
+    async def summarize(self, context: str):
         """Summarize the given context using the loaded prompt."""
         prompt = ChatPromptTemplate.from_template(
             "Summarize the chat history in reported speech in less than 100 words: {history}"
@@ -75,7 +94,7 @@ class AIChatCore(LLMBase):
         
         chain = prompt | llm
 
-        result = chain.invoke({"history": context})
+        result = await chain.ainvoke({"history": context})
         summary = result.content
 
         logger.info("Context successfully summarized.")
