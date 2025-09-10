@@ -54,3 +54,41 @@ def extract_ai_message(response_json: Dict) -> str:
     # Step 3: Log a warning and return a default message
     logger.warning("No valid AI message content found in response.")
     return "I'm sorry, I couldn't generate a response. Please try again."
+
+def stream_extract_message(chunk) -> list[str]:
+    """
+    Extract message strings from a streaming chunk (dict, object, or JSON string).
+    Returns a list of message strings.
+    """
+    import json
+    messages = []
+    # If chunk is an object with .content
+    if hasattr(chunk, "content") and isinstance(chunk.content, str):
+        messages.append(chunk.content)
+    # If chunk is a dict
+    elif isinstance(chunk, dict):
+        # Try to extract 'content' directly
+        if "content" in chunk and isinstance(chunk["content"], str):
+            messages.append(chunk["content"])
+        # Or look for messages in nested dicts
+        elif "agent" in chunk and "messages" in chunk["agent"]:
+            for msg in chunk["agent"]["messages"]:
+                if hasattr(msg, "content") and isinstance(msg.content, str):
+                    messages.append(msg.content)
+                elif isinstance(msg, dict) and "content" in msg and isinstance(msg["content"], str):
+                    messages.append(msg["content"])
+    # If chunk is a JSON string
+    elif isinstance(chunk, str) and chunk.startswith("{"):
+        try:
+            data = json.loads(chunk)
+            if "content" in data and isinstance(data["content"], str):
+                messages.append(data["content"])
+            elif "agent" in data and "messages" in data["agent"]:
+                for msg in data["agent"]["messages"]:
+                    if isinstance(msg, dict) and "content" in msg and isinstance(msg["content"], str):
+                        messages.append(msg["content"])
+        except Exception:
+            messages.append(str(chunk))
+    else:
+        messages.append(str(chunk))
+    return messages
