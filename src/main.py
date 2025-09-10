@@ -9,24 +9,22 @@ DESCRIPTION:
     interaction with the selected LLM.
 """
 
-from models.api import (
-    UserInput,
-    ChatResponse
-)
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconnect
 from utils.config import setup_logger, setup_async_logger
-from utils.serialization import to_dict
-from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 from memory.supabase import SupabaseMemoryManager
-from models.supabase import MessageRecord
-from utils.types import Sender
-from llms.factory import get_llm
-from llms.models import AIChatCore
-from datetime import datetime
-from utils.config import settings
 from utils.messages import extract_ai_message
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+from models.supabase import MessageRecord
+from llms.models import AIChatCore
+from utils.config import settings
+from llms.factory import get_llm
+from utils.types import Sender
+from models.api import (
+    UserInput
+)
+import json
 
 logger = setup_logger("main.log")
 
@@ -67,15 +65,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/chat")
+@app.websocket("/ws/chat")
 async def chat(
-    user_input: UserInput
+    websocket: WebSocket
 ):
     """
     This endpoint handles user chat input and returns
     a response from the selected LLM with persistent memory.
     """
+    await websocket.accept()
     try:
+        raw = await websocket.receive_json()
+        user_input = UserInput.model_validate(raw)
         # Validate user input
         if not user_input.user_id or not user_input.message:
             raise HTTPException(
@@ -104,23 +105,16 @@ async def chat(
         logger.debug(f"Retrieved context: {context}")
 
         context_str = "\n".join([f"{record.sender}: {record.message}" for record in context])
-        context_summary = model.summarize(context_str)
+        context_summary = await model.summarize(context_str)
 
         logger.info(f"Context summary generated: {context_summary}")
-
-        response = model.generate(user_input.message, context_str)
-
-        logger.info(f"Response generated: {response}")
-
-        # Validate response structure
-        if not isinstance(response, dict) or "messages" not in response or not response["messages"]:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Invalid response structure from LLM."
-            )
-
-        message = extract_ai_message(response)
-        usage = getattr(response["messages"][0], "response_metadata", {})
+        ai_tokens = []
+        async for token in model.generate(user_input.message, context_str):
+            await websocket.send_text(token)
+            ai_tokens.append(token)
+        ai_message_str = ''.join(ai_tokens)
+        await websocket.send_text("[DONE]")
+        logger.info(f"Completed response for user {user_input.user_id}")
 
         # Save user message
         user_message = MessageRecord(
@@ -129,27 +123,26 @@ async def chat(
             sender=Sender.USER,
             message=user_input.message,
             meta={
-                "chat_id": user_input.chat_id,
-                "llm_provider": user_input.llm,
-                "temperature": user_input.temperature,
-                "username": user_input.username
+            "chat_id": user_input.chat_id,
+            "llm_provider": user_input.llm,
+            "temperature": user_input.temperature,
+            "username": user_input.username
             }
         )
-        
+
         # Save AI response
         ai_message = MessageRecord(
             user_id=user_input.user_id,
             chat_id=user_input.chat_id,
             sender=Sender.SYSTEM,
-            message=message,
+            message=ai_message_str,
             meta={
-                "chat_id": user_input.chat_id,
-                "llm_provider": user_input.llm,
-                "temperature": user_input.temperature,
-                "usage": usage
+            "chat_id": user_input.chat_id,
+            "llm_provider": user_input.llm,
+            "temperature": user_input.temperature
             }
         )
-        
+
         # Persist to Supabase asynchronously
         try:
             await supabase_manager.add_message_record(user_message)
@@ -157,31 +150,17 @@ async def chat(
             logger.info("Messages persisted to Supabase successfully")
         except Exception as e:
             logger.error(f"Failed to persist messages to Supabase: {e}")
-        
-        # Create response object
-        model_response = ChatResponse(
-            message=message,
-            user_id=user_input.user_id,
-            timestamp=datetime.now(),
-            sources=None
-        )
-
-        # Use model_dump with mode='json' to ensure proper serialization
-        response_dict = model_response.model_dump(mode='json')
-
-        response = to_dict(response_dict)
-        
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=response
-        )
+    
+    except WebSocketDisconnect as we:
+        logger.error(f"Error to work with websocket: {we}")
 
     except Exception as e:
-        logger.error(f"Error in /chat endpoint: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while processing your request."
-        )
+        logger.error(f"Error in /ws/chat endpoint: {e}")
+        try:
+            await websocket.send_text(f"[ERROR] {e}")
+            logger.debug(f"Sent error message to client: {e}")
+        except Exception:
+            pass
 
 # TODO: Health check endpoint
 @app.get("/health")
