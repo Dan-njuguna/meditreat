@@ -9,7 +9,7 @@ DESCRIPTION: Base class for all LLMs in the application.
 
 from utils.config import setup_logger
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, AsyncGenerator
 
 logger = setup_logger("llm_base.log")
 
@@ -24,6 +24,8 @@ class LLMBase(ABC):
         logger.info(f"{self.__class__.__name__} initialized with {llm.__class__.__name__}")
 
     @abstractmethod
-    def generate(self, prompt: str, context: str, **kwargs: Any) -> str:
+    async def generate(self, prompt: str, context: str, **kwargs: Any) -> AsyncGenerator[str, None]:
         """Generate a response from the LLM."""
+        if False:
+            yield ""
         raise NotImplementedError("Subclasses must implement generate method.")

@@ -26,7 +26,7 @@ def setup_logger(
     with a fallback for the default logger.
     """
     try:
-        logsdir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+        logsdir = os.path.join(basedir, "logs")
         if not os.path.exists(logsdir):
             os.makedirs(logsdir)
 

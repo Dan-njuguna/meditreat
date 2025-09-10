@@ -34,7 +34,8 @@ def get_llm(llm_name: str = "openai"):
             model=model_name,
             temperature=settings.get("temperature", 0),
             api_key=settings.get("openai_api_key"),
-            base_url=settings.get("base_url")
+            base_url=settings.get("base_url"),
+            streaming=True
         )
         search_tool = DuckDuckGoSearchRun()
         agent = create_react_agent(
@@ -58,7 +59,8 @@ def get_llm(llm_name: str = "openai"):
             model=model_name,
             temperature=settings.get("temperature", 0),
             api_key=settings.get("openai_api_key"),
-            base_url=settings.get("base_url")
+            base_url=settings.get("base_url"),
+            streaming=True
         )
         search_tool = DuckDuckGoSearchRun()
         agent = create_react_agent(
