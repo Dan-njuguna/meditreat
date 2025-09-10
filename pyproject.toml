@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "ddgs>=9.5.5",
     "fastapi[all]>=0.116.1",
     "langchain-anthropic>=0.3.19",
     "langchain-community>=0.3.29",
@@ -14,4 +15,5 @@ dependencies = [
     "loguru>=0.7.3",
     "python-decouple>=3.8",
     "supabase>=2.18.1",
+    "websockets>=15.0.1",
 ]
