@@ -13,7 +13,7 @@ COPY uv.lock /app/uv.lock
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
 
-RUN uv sync --frozen --no-dev
+RUN UV_HTTP_TIMEOUT=120 uv sync --frozen --no-dev
 
 FROM python:3.12-slim AS runtime
 
