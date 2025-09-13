@@ -13,7 +13,6 @@ from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconne
 from utils.config import setup_logger, setup_async_logger
 from fastapi.middleware.cors import CORSMiddleware
 from memory.supabase import SupabaseMemoryManager
-from utils.messages import extract_ai_message
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from models.supabase import MessageRecord
@@ -24,7 +23,6 @@ from utils.types import Sender
 from models.api import (
     UserInput
 )
-import json
 
 logger = setup_logger("main.log")
 
@@ -53,7 +51,9 @@ app = FastAPI(
     description="API for interacting with LLMs to acquire business insights and" \
                 " generate business workplans.",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None
 )
 
 # Set up CORS middleware
@@ -169,3 +169,16 @@ async def health_check():
     This endpoint checks the health of the API.
     """
     return JSONResponse(content={"status": "ok"}, status_code=status.HTTP_200_OK)
+
+@app.get("/")
+async def root():
+    """This endpoint is the root endpoint of the API.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "welcome": "Welcome, to Meditreat, your best medical consultant.",
+            "version": "0.1.0",
+            "endpoints": "[/, health, ws/*]"
+        }
+    )
