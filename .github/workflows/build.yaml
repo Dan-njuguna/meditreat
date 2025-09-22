@@ -1,0 +1,27 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: [3.12, 3.13]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v2
+
+      - name: Setup python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --no-dev
