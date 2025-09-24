@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: dannj/meditreat:latest
     ports:
       - "8002:8000"
     env_file:
