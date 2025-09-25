@@ -28,7 +28,7 @@ jobs:
         run: uv add ruff
 
       - name: Run ruff
-        run: uv ruff check --fix --exit-zero
+        run: uv ruff ruff check --fix --exit-zero
 
   docker-build:
     runs-on: ubuntu-latest
